@@ -4,7 +4,7 @@ import argparse
 
 
 from pyVim.connect import SmartConnect, Disconnect
-from pyVmomi import vim
+import pyVmomi
 from pyVim import task
 
 import re
@@ -73,7 +73,7 @@ def main():
             exit()
 
         # List VMs
-        vm_view = si.content.viewManager.CreateContainerView(datacenter, [vim.VirtualMachine], True)
+        vm_view = si.content.viewManager.CreateContainerView(datacenter, [pyVmomi.vim.VirtualMachine], True)
         vms_list = vm_view.view
         vm_view.Destroy()
 
@@ -86,7 +86,7 @@ def main():
             else:
                 is_on_src_ds = True
             for device in vm.config.hardware.device:
-                if isinstance(device, vim.vm.device.VirtualDisk):
+                if isinstance(device, pyVmomi.vim.vm.device.VirtualDisk):
                     if device.backing.datastore.name == args.datastore:
                         is_on_dest_ds = True
                         if verbose: print("  Found on DEST Datastore " + args.datastore + ": "+ vm.name)
@@ -104,7 +104,7 @@ def main():
                             else:
                                 print("Migrating VM: " + vm.name)
                                 if not args.dryrun:
-                                    t = vm.Relocate(spec=vim.vm.RelocateSpec(datastore=destination_ds))
+                                    t = vm.Relocate(spec=pyVmomi.vim.vm.RelocateSpec(datastore=destination_ds))
                                     task.WaitForTask(t)
                                     print("VM migrated")
                                 else:
