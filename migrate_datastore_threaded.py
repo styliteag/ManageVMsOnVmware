@@ -3,13 +3,12 @@
 import argparse
 import threading
 import time
-
-
-from pyVim.connect import SmartConnect, Disconnect
-import pyVmomi
-from pyVim import task
-
 import re
+
+# import the vSphere Python SDK needed modules
+import pyVmomi
+from pyVim.connect import SmartConnect, Disconnect
+from pyVim import task
 
 def GetArgs():
    parser = argparse.ArgumentParser(
