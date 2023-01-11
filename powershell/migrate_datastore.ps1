@@ -189,7 +189,7 @@ if ($ExcludeVMs) {
 if ($vms) {
   # Perform a storage vMotion for each VM
   foreach ($vm in $vms) {
-    Write-Host "Performing storage vMotion for VM $($vm.Name)..."
+    Write-Verbose "Performing storage vMotion for VM $($vm.Name)..."
     if ($DryRun -eq $false) { 
       Wait-TaskvMotions -vMotionLimit $vMotionLimit -DelaySeconds $DelaySeconds
     }
