@@ -2,41 +2,58 @@
 
 <#
 .NOTES
-  Script name: test.ps1
+  Script name: migrate_datastore.ps1
   Created on: 01/01/2023
   Author: Wim Bonis, wb@stylite.de
-  Description: Does something with VMs.
+  Description: Migration of VMs to a new datastore
   Dependencies: None known
  
 .SYNOPSIS
 .DESCRIPTION
-.PARAMETER VMs
-.PARAMETER Attributes
-.PARAMETER vCenter
+.PARAMETER Server
+  IP odr DNS Name of VCenter Server (mandatory)
+.PARAMETER Username
+  Username to connect to VCenter Server (mandatory)
+.PARAMETER Pwd
+  Password to connect to VCenter Server (mandatory)
+.PARAMETER DestinationDatastore
+  Name of the destination datastore (must be a valid datastore name, mandatory)
+.PARAMETER SourceDatastore
+  Name of the source datastore (must be a valid datastore name, optional)
+.PARAMETER PoweredOn
+  Migrate only powered on VMs (default: true)
+.PARAMETER VMNames
+  List of VMs to migrate (default: all VMs)
+  Can be a comma separated list of Names OR a wildcard expression (e.g. VMname*)
+.PARAMETER FolderNames
+  List of VM in Folders folders to migrate (default: all folders)
+  Checks also one parent folder up (e.g. Foldername1/Foldername2/VMname)
+  Can be a comma separated list of Names OR a wildcard expression (e.g. Foldername*)
+.PARAMETER vMotionLimit
+  Maximum number of vMotions to run in parallel (default: 1)
+.PARAMETER DelaySeconds
+  Number of seconds to wait before checking for running vMotions (default: 30)
+.PARAMETER ExcludeVMs
+  List of VMs to exclude from migration (default: none)
+  Can be a comma separated list of Names OR a wildcard expression (e.g. VMname*)
+.PARAMETER DryRun
+  Do not perform the migration, only show what would be done (default: false)
+
 .EXAMPLE
-  .\Set-CustomAttributesInGuestInfo.ps1 -VM (get-vm testvm01) -Attributes 'Created On', 'Created By'
-  
-  Gets the custom attributes 'Created On' and 'Created By' for 'testvm01' and sets their 
-  values in 'guestinfo.CreatedOn' and 'guestinfo.CreatedBy'.
+  migrate_datastore.ps1 -Server IP -Username admin@vsphere.local -Pwd 'password' -DestinationDatastore 'poolBLUE-NFS-esx01' -VmNames turn*  -Verbose
 .EXAMPLE
-  .\Set-CustomAttributesInGuestInfo.ps1-VM (get-cluster Dev-01 | get-vm) -Attributes 'Created On'
-  
-  Gets the custom attribute 'Created On' for all VMs in the Dev-01 cluster and sets 'guestinfo.CreatedOn'
-  on each VM.
+  migrate_datastore.ps1 -Server IP -Username admin@vsphere.local -Pwd 'password' -DestinationDatastore 'poolBLUE-NFS-esx01' -VmNames turn1,turn2 -SourceDatastore 'poolBLUE-NFS-esx02,
+
+
 #>
 #Requires -modules VMware.PowerCLI
 
 [CmdletBinding()]
 Param (
-  [Parameter(Mandatory=$true,Position=0)]
-  [string]$Server = "vcenter",
-  [Parameter(Mandatory=$true,Position=1)]
-  [string]$Username = "addministrator@vsphere.local",
-  [Parameter(Mandatory=$true,Position=2)]
-  [string]$Pwd = "password",
-  [Parameter(Mandatory=$true,Position=3)]
-  [string]$DestinationDatastore,
-
+  [Parameter(Mandatory=$true,Position=0)][string]$Server = "vcenter",
+  [Parameter(Mandatory=$true,Position=1)][string]$Username = "addministrator@vsphere.local",
+  [Parameter(Mandatory=$true,Position=2)][string]$Pwd = "password",
+  [Parameter(Mandatory=$true,Position=3)][string]$DestinationDatastore = "Datastore1",
   [string]$SourceDatastore,
   [string]$PoweredOn = $true,
   [int]$vMotionLimit=1,
