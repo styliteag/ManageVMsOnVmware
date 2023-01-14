@@ -59,7 +59,7 @@ Param (
   [int]$vMotionLimit=1,
   [int]$DelaySeconds=30,
   [string[]]$ExcludeVMs = @(),
-  [boolean]$DryRun = $false,
+  [switch]$DryRun = $false,
   [string[]]$VMNames = @(),
   [string[]]$FolderNames = @()
 )
@@ -91,20 +91,22 @@ function Wait-TaskvMotions {
   )
 
   # Wait because Task do not show up immediately
-  Start-Sleep ($DelaySeconds)
+  # Start-Sleep ($DelaySeconds)
+
+  Write-Host "    $(Get-Date)- Waiting for not more than $($vMotionLimit) vMotions to run."
 
   while ( ((Get-Task | Where-Object { ($_.Name -like "RelocateVM_Task" -and $_.State -like "Running")} | Measure-Object).Count) -ge $vMotionLimit  )
   {
-   Write-Verbose "$(Get-Date)- Waiting $($DelaySeconds) seconds before checking again."
+   Write-Verbose "    $(Get-Date)- Waiting $($DelaySeconds) seconds before checking again."
    Start-Sleep ($DelaySeconds)
-  } 
-  Write-Verbose "$(Get-Date) - Proceeding."
+  }
+  Write-Verbose "    $(Get-Date) - Proceeding."
 } # end function
 
 if ($vCenter) {
   Connect-VIServer $vCenter
 }
-Write-Output "Hello World!"
+##Write-Output "Hello World!"
 # Import the VMware PowerCLI module
 #Write-Output "Importing VMware.PowerCLI module..."
 Import-Module VMware.PowerCLI
@@ -189,15 +191,15 @@ if ($ExcludeVMs) {
 if ($vms) {
   # Perform a storage vMotion for each VM
   foreach ($vm in $vms) {
-    Write-Verbose "Performing storage vMotion for VM $($vm.Name)..."
+    Write-Host "Performing storage vMotion for VM $($vm.Name) to $($DestDatastore.Name)"
     if ($DryRun -eq $false) { 
       Wait-TaskvMotions -vMotionLimit $vMotionLimit -DelaySeconds $DelaySeconds
-    }
-    $task = Move-VM -VM $vm -Datastore $DestDatastore -Confirm:$false -WhatIf:$DryRun -RunAsync
-    Write-Verbose "Task   : $($task) submitted"
-    Write-Verbose "Task ID: $($task.Id)"
-    if ($DryRun -eq $false) { 
+      $task = Move-VM -VM $vm -Datastore $DestDatastore -Confirm:$false -WhatIf:$DryRun -RunAsync
+      Write-Verbose "Task   : $($task) submitted"
+      Write-Verbose "Task ID: $($task.Id)"
       Wait-TaskvMotion_ispresent -TaskID $task.Id
+    } else {
+      Write-Host "Dry Run: $($vm.Name) would be moved to $($DestDatastore.Name)"
     }
   }
 } else {
