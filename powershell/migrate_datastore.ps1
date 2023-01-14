@@ -189,6 +189,12 @@ if ($ExcludeVMs) {
 
 # Check if there are any running VMs
 if ($vms) {
+  Write-Host "=============================================================="
+  foreach ($vm in $vms) {
+    $UsedSpaceGB = [math]::Round($vm.UsedSpaceGB,2)
+    Write-Host " VM: $($vm.Name) - $($UsedSpaceGB)GB - $($vm.Folder.Name) - $($vm.PowerState)"
+  }
+  Write-Host "=============================================================="
   # Perform a storage vMotion for each VM
   foreach ($vm in $vms) {
     Write-Host "Performing storage vMotion for VM $($vm.Name) to $($DestDatastore.Name)"
