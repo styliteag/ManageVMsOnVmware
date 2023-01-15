@@ -30,7 +30,8 @@
   Checks also one parent folder up (e.g. Foldername1/Foldername2/VMname)
   Can be a comma separated list of Names OR a wildcard expression (e.g. Foldername*)
 .PARAMETER vMotionLimit
-  Maximum number of vMotions to run in parallel (default: 1)
+  Maximum number of vMotions to run in parallel (default: 0)
+  When it is set to 0, it will wait the current vMotions to finish before starting the next one. (Single threaded)
 .PARAMETER DelaySeconds
   Number of seconds to wait before checking for running vMotions (default: 30)
 .PARAMETER ExcludeVMs
@@ -56,7 +57,7 @@ Param (
   [Parameter(Mandatory=$true,Position=3)][string]$DestinationDatastore = "Datastore1",
   [string]$SourceDatastore,
   [string]$PoweredOn = $true,
-  [int]$vMotionLimit=1,
+  [int]$vMotionLimit=0,
   [int]$DelaySeconds=30,
   [string[]]$ExcludeVMs = @(),
   [switch]$DryRun = $false,
@@ -198,12 +199,42 @@ if ($vms) {
   # Perform a storage vMotion for each VM
   foreach ($vm in $vms) {
     Write-Host "Performing storage vMotion for VM $($vm.Name) to $($DestDatastore.Name)"
-    if ($DryRun -eq $false) { 
-      Wait-TaskvMotions -vMotionLimit $vMotionLimit -DelaySeconds $DelaySeconds
-      $task = Move-VM -VM $vm -Datastore $DestDatastore -Confirm:$false -WhatIf:$DryRun -RunAsync
-      Write-Verbose "Task   : $($task) submitted"
-      Write-Verbose "Task ID: $($task.Id)"
-      Wait-TaskvMotion_ispresent -TaskID $task.Id
+    if ($DryRun -eq $false) {
+      if ($vMotionLimit -gt 0) {
+        Wait-TaskvMotions -vMotionLimit $vMotionLimit -DelaySeconds $DelaySeconds
+        $task = Move-VM -VM $vm -Datastore $DestDatastore -Confirm:$false -WhatIf:$DryRun -RunAsync
+        if ($null -eq $task) {
+          Write-Host "$(Get-Date)- Error: vMotion for $($vm.Name) failed"
+          # Exit with error
+          exit
+        }
+        Write-Verbose "Task   : $($task) submitted"
+        Write-Verbose "Task ID: $($task.Id)"
+        Wait-TaskvMotion_ispresent -TaskID $task.Id
+      } else {
+        # Single theraded
+        $now = Get-Date
+        Write-Host "$(Get-Date)- Starting vMotion for $($vm.Name)"
+        $task = Move-VM -VM $vm -Datastore $DestDatastore -Confirm:$false -WhatIf:$DryRun 
+        # Check for errors
+        if ($null -eq $task) {
+          Write-Host "$(Get-Date)- Error: vMotion for $($vm.Name) failed"
+          # Exit with error
+          exit
+        }
+        Write-Host "$(Get-Date)- Finished vMotion for $($vm.Name)"
+        $timetaken = (Get-Date) - $now
+        # Time in Seconds
+        $seconds = $timetaken.TotalSeconds
+        Write-Host "       - Time taken: $($timetaken)" 
+        Write-Host "         $([math]::Round($seconds,2)) seconds"
+        Write-Host "         $([math]::Round($seconds/60,2)) minutes"
+        Write-Host "       - Time per GB: $([math]::Round($seconds/$UsedSpaceGB,2)) seconds"
+        Write-Host "       - Time per TB: $([math]::Round((1024/60)*$seconds/$UsedSpaceGB,2)) minutes"
+        #Write-Host "       - Transfer rate: $([math]::Round($UsedSpaceGB/$seconds,2)) GB/s"
+        Write-Host "       - Transfer rate: $([math]::Round($UsedSpaceGB*8/$seconds,2)) Gb/s"
+        
+      }
     } else {
       Write-Host "Dry Run: $($vm.Name) would be moved to $($DestDatastore.Name)"
     }
