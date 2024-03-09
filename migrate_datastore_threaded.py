@@ -141,6 +141,7 @@ def main():
 
         threads = []
         # Loop through VMs
+        vm_to_migrate = []
         for vm in vms_list:
             if verbose: print("VM: " + vm.name)
             is_on_dest_ds = False
@@ -163,32 +164,46 @@ def main():
                     if not args.folder or (args.folder and re.search(args.folder,vm.parent.name+"/"+vm.parent.parent.name ,re.IGNORECASE)):
                         if not args.vm or (args.vm and re.search(args.vm, vm.name,re.IGNORECASE)):
                             if args.exclude and (args.exclude and re.search(args.exclude, vm.name,re.IGNORECASE )):
-                                print("NOT Migrating VM: (excluded):" + vm.name)
+                                print(" NOT Migrating VM: "+ vm.name + " (excluded)")
                             else:
-                                print("Migrating VM: " + vm.name)
-                                if not args.dryrun:
-                                    # print the number of curent threads
-                                    print("Current Number of my threads: " + str(len(threads)))
-                                    if len(threads) >= args.threads: 
-                                        print("Waiting for a thread to finish (" + str(len(threads)) + "/" + str(args.threads) + ")")
-                                    while len(threads) >= args.threads:
-                                        # wait for a thread to finish
-                                        print(".", end='', flush=True)
-                                        time.sleep(30)
-                                        for t in threads:
-                                            if not t.is_alive():
-                                                threads.remove(t)
-                                                break
-                                    t = threading.Thread(target=relocate_vm, args=(vm, destination_ds, source_dc, verbose))
-                                    threads.append(t)
-                                    t.start()
-                                else:
-                                    print("Dryrun: VM not migrated")
-        #break
+                                print("WILL Migrating VM: " + vm.name)
+                                vm_to_migrate.append(vm)
 
-    # wait for threads to finish
-    for t in threads:
-        t.join()
+        print("")
+        print("Number of VMs to migrate: " + str(len(vm_to_migrate)))
+        print("")
+
+        if not args.dryrun:
+            print("Sleep 5 seconds before migrating VMs")
+            time.sleep(5)
+            # Migrate VMs
+            threads = []
+            for vm in vm_to_migrate:
+                    # print the number of current threads
+                    if verbose: print("Current Number of my threads: " + str(len(threads)))
+                    if len(threads) >= args.threads: 
+                        if verbose: print("Waiting for a thread to finish (" + str(len(threads)) + "/" + str(args.threads) + ")")
+                    # print all running threads
+                    for t in threads:
+                        print("    Thread: " + str(t.name) + " is alive: " + str(t.is_alive()))
+                    while len(threads) >= args.threads:
+                        # wait for a thread to finish
+                        print(".", end='', flush=True)
+                        time.sleep(30)
+                        for t in threads:
+                            if not t.is_alive():
+                                threads.remove(t)
+                                break
+                    print("  Migrate VM: " + vm.name + " (start task)")
+                    t = threading.Thread(target=relocate_vm, args=(vm, destination_ds, source_dc, verbose), name=vm.name)
+                    threads.append(t)
+                    t.start()
+            
+            # wait for threads to finish
+            for t in threads:
+                t.join()
+        else:
+            print("Dryrun: Not migrating VMs")
 
     Disconnect(si)
 
