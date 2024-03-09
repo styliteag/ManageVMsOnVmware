@@ -20,8 +20,8 @@
   Name of the destination datastore (must be a valid datastore name, mandatory)
 .PARAMETER SourceDatastore
   Name of the source datastore (must be a valid datastore name, optional)
-.PARAMETER PoweredOn
-  Migrate only powered on VMs (default: true)
+.PARAMETER PoweredOff
+  Migrate only powered off VMs (default: false)
 .PARAMETER VMNames
   List of VMs to migrate (default: all VMs)
   Can be a comma separated list of Names OR a wildcard expression (e.g. VMname*)
@@ -56,7 +56,7 @@ Param (
   [Parameter(Mandatory=$true,Position=2)][string]$Pwd = "password",
   [Parameter(Mandatory=$true,Position=3)][string]$DestinationDatastore = "Datastore1",
   [string]$SourceDatastore,
-  [string]$PoweredOn = $true,
+  [switch]$PoweredOff = $false,
   [int]$vMotionLimit=0,
   [int]$DelaySeconds=30,
   [string[]]$ExcludeVMs = @(),
@@ -76,7 +76,7 @@ function Wait-TaskvMotion_ispresent {
   $Task = ((Get-Task -ID $TaskID | Where-Object { ( $_.Name -like "RelocateVM_Task" -and $_.State -like "Running")}) | Measure-Object).Count
   while ( $Task -eq 0 )
   {
-    Write-Verbose "." -NoNewline
+    #Write-Verbose "." -NoNewline
     Start-Sleep (5)
     $Task = ((Get-Task -ID $TaskID | Where-Object { ( $_.Name -like "RelocateVM_Task" -and $_.State -like "Running")}) | Measure-Object).Count
   } # end while
@@ -147,8 +147,10 @@ if ($DestinationDatastore) {
 
 $vms = Get-VM | Sort-Object UsedSpaceGB -Descending
 
-if ($PoweredOn -eq $true) {
+if ($PoweredOff -eq $false) {
   $vms = $vms | Where-Object {$_.PowerState -eq "PoweredOn"}
+} else {
+  $vms = $vms | Where-Object {$_.PowerState -ne "PoweredOn"}
 }
 
 if ($VMNames) {
@@ -182,7 +184,7 @@ if ($DestDatastoreID) {
 
 if ($ExcludeVMs) {
   if (@($ExcludeVMs).count -eq 1) {
-    $vms = $vms | Where-Object {$_.Name -notlike "$ExcludeVMs"}
+    $vms = $vms | Where-Object {$_.Name -notmatch "$ExcludeVMs"}
   } else {
     $vms = $vms | Where-Object {$_.Name -notin $ExcludeVMs}
   }
@@ -205,8 +207,8 @@ if ($vms) {
         $task = Move-VM -VM $vm -Datastore $DestDatastore -Confirm:$false -WhatIf:$DryRun -RunAsync
         if ($null -eq $task) {
           Write-Host "$(Get-Date)- Error: vMotion for $($vm.Name) failed"
-          # Exit with error
-          exit
+          # Exit powershell script with error
+          Exit-PSHostProcess -ExitCode 1
         }
         Write-Verbose "Task   : $($task) submitted"
         Write-Verbose "Task ID: $($task.Id)"
@@ -240,7 +242,7 @@ if ($vms) {
     }
   }
 } else {
-  Write-Host "There are no running VMs on this server"
+  Write-Host "There are no VMs matching to migrate"
 }
 
 # Disconnect from the vCenter server
