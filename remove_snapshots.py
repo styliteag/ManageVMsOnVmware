@@ -33,9 +33,10 @@ def GetArgs():
                        help="number of Tasks to start in the vCenter at the same time\nSample: --threads 3")
    parser.add_argument('-v', '--verbose', dest='verbose', default=0, action="count",
                        help="verbose\nSample: -vv")
-   parser.add_argument('-x', '--exclude', dest='exclude', 
+   parser.add_argument('-x', '--exclude', dest='exclude',
                        help="exclude\nSample: --exclude VM-NAME123")
-   
+   parser.add_argument('--older', dest='older', type=int,
+                       help="Only remove snapshots older than specified days\nSample: --older 30")
    parser.add_argument('-n', '--dryrun', dest='dryrun', default=False, action="store_true",
                        help="dry-run\nSample: --dryrun")
    args = parser.parse_args()
@@ -76,6 +77,41 @@ def get_current_snap_obj(snapshots, snapob):
     return snap_obj
 
 
+def get_all_snapshots_recursively(snapshots):
+    """Get all snapshots recursively (returns snapshot objects, not strings)"""
+    snap_obj = []
+    for snapshot in snapshots:
+        snap_obj.append(snapshot)
+        # Recursively check child snapshots
+        snap_obj = snap_obj + get_all_snapshots_recursively(snapshot.childSnapshotList)
+    return snap_obj
+
+
+def get_snapshots_older_than_days(snapshots, days):
+    """Get all snapshots that are older than the specified number of days"""
+    import datetime
+    snap_obj = []
+    cutoff_date = datetime.datetime.now() - datetime.timedelta(days=days)
+
+    for snapshot in snapshots:
+        # Convert createTime to datetime if it's not already
+        create_time = snapshot.createTime
+        if isinstance(create_time, str):
+            # Handle string format if needed
+            create_time = datetime.datetime.fromisoformat(create_time.replace('Z', '+00:00'))
+        elif hasattr(create_time, 'replace'):  # vim.DateTime object
+            # Convert vim.DateTime to python datetime
+            create_time = create_time.replace(tzinfo=None)
+
+        if create_time < cutoff_date:
+            snap_obj.append(snapshot)
+
+        # Recursively check child snapshots
+        snap_obj = snap_obj + get_snapshots_older_than_days(
+                                snapshot.childSnapshotList, days)
+    return snap_obj
+
+
 def snapshotRemove(vm, snapshotname, dryrun, verbose):
     if verbose: print("Removing snapshot: " + snapshotname + " from VM: " + vm.name)
     snap_obj = get_snapshots_by_name_recursively(vm.snapshot.rootSnapshotList, snapshotname)
@@ -98,6 +134,51 @@ def snapshotRemoveAll(vm, dryrun, verbose):
     if not dryrun:
         task.WaitForTask(vm.RemoveAllSnapshots())
         print("Snapshot removed:" + vm.name)
+    return
+
+
+def snapshotRemoveOlderThan(vm, days, dryrun, verbose):
+    """Remove snapshots older than specified days"""
+    if verbose: print("Removing snapshots older than {} days from VM: {}".format(days, vm.name))
+
+    # Get all snapshots on the VM
+    all_snapshots = get_all_snapshots_recursively(vm.snapshot.rootSnapshotList)
+    # Get snapshots older than specified days
+    old_snapshots = get_snapshots_older_than_days(vm.snapshot.rootSnapshotList, days)
+
+    if not old_snapshots:
+        if verbose: print("  No snapshots older than {} days found on VM: {}".format(days, vm.name))
+        return
+
+    # Optimization: if ALL snapshots are older than the threshold, use RemoveAllSnapshots
+    if len(all_snapshots) == len(old_snapshots):
+        if verbose: print("  All {} snapshots are older than {} days, using RemoveAllSnapshots".format(len(all_snapshots), days))
+
+        # Show all snapshots that will be removed
+        for snap_obj in all_snapshots:
+            snap_text = "Name: %s; Description: %s; CreateTime: %s; State: %s" % (
+                                            snap_obj.name, snap_obj.description,
+                                            snap_obj.createTime, snap_obj.state)
+            print("  " + vm.name + " " + snap_text)
+
+        if not dryrun:
+            task.WaitForTask(vm.RemoveAllSnapshots())
+            print("All snapshots removed from: {}".format(vm.name))
+    else:
+        # Only some snapshots are old, remove them individually
+        if verbose: print("  Found {} old snapshots out of {} total, removing individually".format(len(old_snapshots), len(all_snapshots)))
+
+        for snap_obj in old_snapshots:
+            snap_text = "Name: %s; Description: %s; CreateTime: %s; State: %s" % (
+                                            snap_obj.name, snap_obj.description,
+                                            snap_obj.createTime, snap_obj.state)
+            print("  " + vm.name + " " + snap_text)
+
+        if not dryrun:
+            for snap_obj in old_snapshots:
+                if verbose: print("  Removing snapshot: {} from VM: {}".format(snap_obj.name, vm.name))
+                task.WaitForTask(snap_obj.snapshot.RemoveSnapshot_Task(removeChildren=True))
+            print("Snapshots older than {} days removed from: {}".format(days, vm.name))
     return
 
 def main():
@@ -161,7 +242,10 @@ def main():
                                                     if not t.is_alive():
                                                         threads.remove(t)
                                                         break
-                                            if args.snapshot:
+                                            if args.older:
+                                                # Remove snapshots older than X days
+                                                t = threading.Thread(target=snapshotRemoveOlderThan, args=(vm, args.older, args.dryrun, verbose))
+                                            elif args.snapshot:
                                                 # Remove specific snapshot
                                                 t = threading.Thread(target=snapshotRemove, args=(vm, args.snapshot, args.dryrun, verbose))
                                             else:
@@ -170,7 +254,11 @@ def main():
                                             threads.append(t)
                                             t.start()
                                         else:
-                                            if args.snapshot:
+                                            if args.older:
+                                                # Remove snapshots older than X days
+                                                if verbose: print("  Removing snapshots older than {} days on: {}".format(args.older, vm.name))
+                                                snapshotRemoveOlderThan(vm, args.older, args.dryrun, verbose)
+                                            elif args.snapshot:
                                                 # Remove specific snapshot
                                                 if verbose: print("  Removing snapshot: " + args.snapshot + " on " + vm.name )
                                                 snapshotRemove(vm, args.snapshot, args.dryrun, verbose)
