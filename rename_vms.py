@@ -44,13 +44,13 @@ def GetArgs():
    args = parser.parse_args()
    return args
 
-def renameVM(vm, new_name, dryrun, verbose):
-    if verbose: print("Renaming VM: {} -> {}".format(vm.name, new_name))
+def renameVM(vm, original_name, new_name, dryrun, verbose):
+    if verbose: print("Renaming VM: {} -> {}".format(original_name, new_name))
     if not dryrun:
         task.WaitForTask(vm.Rename_Task(newName=new_name))
-        print("VM renamed: {} -> {}".format(vm.name, new_name))
+        print("VM renamed: {} -> {}".format(original_name, new_name))
     else:
-        print("DRYRUN: Would rename VM: {} -> {}".format(vm.name, new_name))
+        print("DRYRUN: Would rename VM: {} -> {}".format(original_name, new_name))
 
 def processVM(vm, args, verbose):
     original_name = vm.name
@@ -115,6 +115,7 @@ def main():
                             result = processVM(vm, args, verbose)
                             if result:
                                 vm_obj, new_name = result
+                                original_name = vm_obj.name
                                 if args.threads > 1:
                                     # start a thread if we have less than args.threads
                                     if len(threads) >= args.threads: 
@@ -127,11 +128,11 @@ def main():
                                             if not t.is_alive():
                                                 threads.remove(t)
                                                 break
-                                    t = threading.Thread(target=renameVM, args=(vm_obj, new_name, args.dryrun, verbose))
+                                    t = threading.Thread(target=renameVM, args=(vm_obj, original_name, new_name, args.dryrun, verbose))
                                     threads.append(t)
                                     t.start()
                                 else:
-                                    renameVM(vm_obj, new_name, args.dryrun, verbose)
+                                    renameVM(vm_obj, original_name, new_name, args.dryrun, verbose)
 
     if args.threads > 1:
         # wait for threads to finish
