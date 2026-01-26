@@ -56,14 +56,14 @@ def GetResourcePools(entity):
 
 def convert_to_template(vm,dc):
     if vm.config.template:
-        print("VM is already a template")
+        print("    VM is already a template")
     else:
-        print("Converting to template")
+        print("    Converting to template")
         vm.MarkAsTemplate()
 
 def convert_to_vm(vm,dc):
     if vm.config.template:
-        print("Converting to VM")
+        print("    Converting to VM")
         pools = GetResourcePools(dc.hostFolder.childEntity[0].resourcePool)
         if len(pools) == 0:
             print("No resource pool found")
@@ -77,15 +77,16 @@ def relocate_vm(vm, destination_ds, source_dc, verbose):
     # Check if the VM is a template
     convert_back = False
     if vm.config.template:
-        print("VM is a template! Convert to VM first")
+        print("    VM is a template! Convert to VM first")
         convert_to_vm(vm=vm,dc=source_dc)
         convert_back = True
     t1 = vm.Relocate(spec=pyVmomi.vim.vm.RelocateSpec(datastore=destination_ds))
     task.WaitForTask(t1)
-    print("VM migrated:" + vm.name)
+    print("")
+    print("    VM migrated:" + vm.name)
 
     if convert_back:
-        print("Converting back to template")
+        print("    Converting back to template")
         convert_to_template(vm=vm,dc=source_dc)
     return
 
@@ -184,8 +185,10 @@ def main():
                     if len(threads) >= args.threads: 
                         if verbose: print("Waiting for a thread to finish (" + str(len(threads)) + "/" + str(args.threads) + ")")
                     # print all running threads
+                    print("    Running threads: ", end='', flush=True)
                     for t in threads:
-                        print("    Thread: " + str(t.name) + " is alive: " + str(t.is_alive()))
+                        print(" "+ str(t.name),end='', flush=True)
+                    print("")
                     while len(threads) >= args.threads:
                         # wait for a thread to finish
                         print(".", end='', flush=True)
@@ -200,6 +203,8 @@ def main():
                     t.start()
             
             # wait for threads to finish
+            print("")
+            print("Waiting for all threads to FINISH")
             for t in threads:
                 t.join()
         else:
