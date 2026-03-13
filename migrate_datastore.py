@@ -143,7 +143,20 @@ def main():
                             if args.exclude and (args.exclude and re.search(args.exclude, vm.name,re.IGNORECASE )):
                                 print("NOT Migrating VM: (excluded)" + vm.name)
                             else:
-                                print("Migrating VM: " + vm.name)
+                                total_bytes = 0
+                                for device in vm.config.hardware.device:
+                                    if isinstance(device, pyVmomi.vim.vm.device.VirtualDisk):
+                                        if getattr(device, "capacityInBytes", None) is not None:
+                                            total_bytes += device.capacityInBytes
+                                        elif getattr(device, "capacityInKB", None) is not None:
+                                            total_bytes += device.capacityInKB * 1024
+                                total_mb = total_bytes / (1024 * 1024) if total_bytes else 0
+                                total_gb = total_bytes / (1024 * 1024 * 1024) if total_bytes else 0
+                                if total_gb >= 1:
+                                    size_str = "%.2f GB" % total_gb
+                                else:
+                                    size_str = "%.2f MB" % total_mb
+                                print("Migrating VM: " + vm.name + " (%s)" % size_str)
                                 if not args.dryrun:
                                     # Check if the VM is a template
                                     convert_back = False
@@ -152,9 +165,13 @@ def main():
                                         convert_to_vm(vm,source_dc)
                                         convert_back = True
 
+                                    start_ts = time.time()
                                     t1 = vm.Relocate(spec=pyVmomi.vim.vm.RelocateSpec(datastore=destination_ds))
                                     task.WaitForTask(t1)
-                                    print("VM migrated")
+                                    duration_sec = max(time.time() - start_ts, 0.001)
+                                    hours = duration_sec / 3600.0
+                                    mb_per_hour = (total_mb / hours) if hours > 0 else 0
+                                    print("VM migrated (Durchsatz: %.2f MB/h)" % mb_per_hour)
 
                                     if convert_back:
                                         print("Converting back to template")
