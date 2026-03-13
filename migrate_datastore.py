@@ -171,7 +171,20 @@ def main():
                                     duration_sec = max(time.time() - start_ts, 0.001)
                                     hours = duration_sec / 3600.0
                                     mb_per_hour = (total_mb / hours) if hours > 0 else 0
-                                    print("VM migrated (Durchsatz: %.2f MB/h)" % mb_per_hour)
+                                    if mb_per_hour >= 1024:
+                                        rate_str = "%.2f GB/h" % (mb_per_hour / 1024.0)
+                                    else:
+                                        rate_str = "%.2f MB/h" % mb_per_hour
+                                    print("VM migrated (Durchsatz: %s)" % rate_str)
+
+                                    if mb_per_hour > 0:
+                                        tb_mb = 1024 * 1024
+                                        hours_for_tb = tb_mb / mb_per_hour
+                                        total_seconds = int(hours_for_tb * 3600)
+                                        h = total_seconds // 3600
+                                        m = (total_seconds % 3600) // 60
+                                        s = total_seconds % 60
+                                        print("Geschätzte Dauer für 1 TB bei diesem Durchsatz: %02d:%02d:%02d (hh:mm:ss)" % (h, m, s))
 
                                     if convert_back:
                                         print("Converting back to template")
